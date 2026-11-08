@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能任务管理系统</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: system-ui, sans-serif;
+    }
+    body {
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background-color: #f7f8fa;
+    }
+    h1 {
+      text-align: center;
+      color: #222;
+      margin-bottom: 30px;
+    }
+    .add-box {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #00000010;
+      display: flex;
+      gap:10px;
+      flex-wrap: wrap;
+      margin-bottom:20px;
+    }
+    #taskInput {
+      flex:1;
+      padding:10px 14px;
+      border:1px solid #ddd;
+      border-radius:8px;
+      font-size:16px;
+      min-width: 180px;
+    }
+    #prioritySelect {
+      padding:10px;
+      border:1px solid #ddd;
+      border-radius:8px;
+      font-size:16px;
+    }
+    #addBtn {
+      padding:10px 20px;
+      background:#2563eb;
+      color:white;
+      border:none;
+      border-radius:8px;
+      cursor:pointer;
+      font-size:16px;
+    }
+    .filter-bar {
+      margin-bottom:16px;
+    }
+    #filterSelect {
+      padding:8px 12px;
+      border:1px solid #ddd;
+      border-radius:8px;
+    }
+    .task-item {
+      background:white;
+      padding:16px;
+      border-radius:10px;
+      box-shadow:0 2px 6px #0000000b;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:10px;
+      gap:12px;
+    }
+    .task-info {
+      flex:1;
+    }
+    .task-title {
+      font-size:16px;
+    }
+    .task-title.done {
+      text-decoration: line-through;
+      color:#888;
+    }
+    .priority-tag {
+      display:inline-block;
+      font-size:12px;
+      padding:2px 8px;
+      border-radius:6px;
+      margin-left:8px;
+    }
+    .p-high {
+      background:#fee2e2;
+      color:#dc2626;
+    }
+    .p-medium {
+      background:#fef3c7;
+      color:#d97706;
+    }
+    .p-low {
+      background:#dcfce7;
+      color:#16a34a;
+    }
+    .task-actions button {
+      padding:6px 10px;
+      border:none;
+      border-radius:6px;
+      cursor:pointer;
+      margin-left:6px;
+      font-size:14px;
+    }
+    .toggle-btn {
+      background:#e0e7ff;
+      color:#4338ca;
+    }
+    .del-btn {
+      background:#fecdd3;
+      color:#be123c;
+    }
+  </style>
+</head>
+<body>
+  <h1>智能任务管理系统</h1>
+
+  <div class="add-box">
+    <input id="taskInput" placeholder="输入新任务...">
+    <select id="prioritySelect">
+      <option value="高">高优先级</option>
+      <option value="中" selected>中优先级</option>
+      <option value="低">低优先级</option>
+    </select>
+    <button id="addBtn">添加任务</button>
+  </div>
+
+  <div class="filter-bar">
+    <select id="filterSelect">
+      <option value="全部">全部</option>
+      <option value="高">高优先级</option>
+      <option value="中">中优先级</option>
+      <option value="低">低优先级</option>
+    </select>
+  </div>
+
+  <div id="taskList"></div>
+
+<script>
+// 说明：整段代码包在函数里，避免与 CDN 脚本声明的全局变量 supabase 重名冲突
+(function () {
+
+// ========== 已经帮你填好Supabase信息 ==========
+const SUPABASE_URL = "https://dfiketybkrqnmmtnarrq.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_NPSi9urjB7Pap1eoJo44ZA_5Wvg2tU7";
+// ======================================================
+const { createClient } = supabase;
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const taskInput = document.getElementById('taskInput');
+const prioritySelect = document.getElementById('prioritySelect');
+const addBtn = document.getElementById('addBtn');
+const filterSelect = document.getElementById('filterSelect');
+const taskListEl = document.getElementById('taskList');
+
+// 加载任务
+async function loadTasks(filter = "全部") {
+  let query = supabaseClient
+    .from('tasks')
+    .select('*')
+    .order('created_at', { ascending: false }); // 创建时间倒序
+
+  if(filter !== "全部"){
+    query = query.eq('priority', filter);
+  }
+  const { data, error } = await query;
+  if(error) return console.error(error);
+  renderTasks(data);
+}
+
+// 渲染列表
+function renderTasks(list) {
+  taskListEl.innerHTML = "";
+  list.forEach(task=>{
+    const div = document.createElement('div');
+    div.className = "task-item";
+    div.innerHTML = `
+      <div class="task-info">
+        <span class="task-title ${task.is_completed?'done':''}">${escapeHtml(task.title)}</span>
+        <span class="priority-tag p-${task.priority === '高'?'high':task.priority==='中'?'medium':'low'}">${task.priority}</span>
+      </div>
+      <div class="task-actions">
+        <button class="toggle-btn">${task.is_completed ? '未完成' : '完成'}</button>
+        <button class="del-btn">删除</button>
+      </div>
+    `
+    // 切换状态
+    div.querySelector('.toggle-btn').onclick = async ()=>{
+      await supabaseClient.from('tasks').update({is_completed: !task.is_completed}).eq('id', task.id);
+      loadTasks(filterSelect.value);
+    }
+    // 删除
+    div.querySelector('.del-btn').onclick = async ()=>{
+      await supabaseClient.from('tasks').delete().eq('id', task.id);
+      loadTasks(filterSelect.value);
+    }
+    taskListEl.appendChild(div);
+  })
+}
+
+// 添加任务
+addBtn.onclick = async ()=>{
+  const title = taskInput.value.trim();
+  if(!title) return alert("请输入任务内容");
+  const priority = prioritySelect.value;
+  const {error} = await supabaseClient.from('tasks').insert([{title, priority}]);
+  if(error) console.error(error);
+  taskInput.value = "";
+  loadTasks(filterSelect.value);
+}
+// 回车添加
+taskInput.onkeydown = (e)=>{
+  if(e.key === 'Enter') addBtn.click();
+}
+// 筛选切换
+filterSelect.onchange = ()=>{
+  loadTasks(filterSelect.value);
+}
+
+function escapeHtml(str){
+  return str.replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))
+}
+
+// 初始化
+loadTasks();
+
+})();
+</script>
+</body>
+</html>
